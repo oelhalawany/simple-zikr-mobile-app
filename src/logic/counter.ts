@@ -54,6 +54,22 @@ export function undoTap(state: ZikrState, id: PhraseId): ZikrState {
   return { ...state, todayCounts: counts };
 }
 
+/**
+ * Clear today's counters but keep history untouched.
+ * Returns a new state; the input is not mutated.
+ */
+export function resetToday(state: ZikrState): ZikrState {
+  return { ...state, todayCounts: {} };
+}
+
+/**
+ * Wipe today's counts, history and therefore the lifetime total.
+ * Returns a fresh state anchored on the given day.
+ */
+export function resetEverything(now: string = localDateStr()): ZikrState {
+  return { today: now, todayCounts: {}, history: {} };
+}
+
 /** Lifetime total: today's counts plus every day in history. */
 export function lifetimeTotal(state: ZikrState): number {
   let total = dayTotal(state.todayCounts);

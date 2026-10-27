@@ -34,8 +34,9 @@ uses the device's **local** date instead (see §6).
 | UI | React Native core components only | No navigation, no UI library — one screen |
 | Persistence | `@react-native-async-storage/async-storage` | Simple key-value JSON store, matches the original's localStorage |
 | Graphics | `react-native-svg` | Draws the progress ring around each circle |
-| Haptics | `expo-haptics` | Vibration feedback on tap/undo |
-| Files | `expo-file-system`, `expo-sharing`, `expo-document-picker` | Backup export/import |
+| Haptics | `expo-haptics` | Vibration feedback on tap/undo/reset |
+| Safe areas | `react-native-safe-area-context` | Keeps content clear of the notch / status bar on iOS |
+| Files | `expo-file-system`, `expo-sharing`, `expo-document-picker` | Installed, unused in this version (reserved for backup) |
 | Tests | Jest + `jest-expo` | Unit tests for pure logic and storage |
 | Lint/Format | ESLint 9 (flat config, `eslint-config-expo`) + Prettier | Code quality |
 
@@ -49,7 +50,7 @@ uses the device's **local** date instead (see §6).
 
 ```
 simple-zikr-mobile-app/
-├── App.tsx                  # Root component: StatusBar + HomeScreen
+├── App.tsx                  # Root: SafeAreaProvider + StatusBar + HomeScreen
 ├── index.ts                 # Expo entry point (registerRootComponent)
 ├── app.json                 # Expo config: name الذكر, slug zikr, icons, splash
 ├── assets/                  # Generated icons/splash (from scripts/make-icons.ps1)
@@ -60,7 +61,11 @@ simple-zikr-mobile-app/
 │   ├── components/          # Reusable, presentational pieces
 │   │   ├── ZikrCircle.tsx   #   One circle: SVG ring + count + phrase + lap note
 │   │   ├── StatCard.tsx     #   Big number + label card (lifetime total, days)
-│   │   └── HistoryList.tsx  #   Past-days list, newest first
+│   │   ├── HistoryList.tsx  #   Past-days list, newest first
+│   │   ├── FullScreenModal.tsx # Modal shell: back button + centered title
+│   │   ├── SettingsModal.tsx #  Full-screen settings + reset confirmations
+│   │   ├── HistoryModal.tsx #   Past days behind the history button
+│   │   └── GearIcon.tsx     #   SVG gear glyph (no icon library)
 │   ├── screens/
 │   │   └── HomeScreen.tsx   # The ONLY screen: owns all app state
 │   ├── logic/
@@ -176,10 +181,15 @@ and set `today` to the new date. Days with zero taps are **not** recorded.
 
 | Value | Function |
 |---|---|
+| Today's total | `dayTotal(state.todayCounts)` — shown under the header as "إجمالي اليوم" |
 | Lifetime total | `lifetimeTotal` = today's counts + Σ history totals |
 | Days tracked | `daysTracked` = `Object.keys(history).length` |
 | Ring progress | `ringProgress(count)` = `(count % 33) / 33` |
 | Laps done | `lapsDone(count)` = `⌊count / 33⌋` → shown as "× N دورة" |
+
+All three totals are read straight from `state` during render, so every tap or
+undo updates them immediately — nothing is cached. They are formatted with
+`toLocaleString('ar-EG')`.
 
 The ring wraps: tap 33 fills it, tap 34 starts lap 2. The lap note appears
 under the circle once `laps > 0`.
@@ -226,23 +236,29 @@ Saves are **debounced 300 ms** (one `setTimeout`, cleared on each state change)
 
 ---
 
-## 8. Backup (export/import)
+## 8. Settings & reset actions
 
-`storage.ts` already contains the pure parts; the UI wiring is the next step:
+The gear button in the home header (48×48, `src/components/GearIcon.tsx`) opens
+`SettingsModal` — a full-screen `Modal` with a back button and two destructive
+actions. The modal owns the confirmation dialogs, so `HomeScreen` only receives
+"the user confirmed" callbacks.
 
-| Function | Role |
-|---|---|
-| `makeBackup(state)` | Wraps state as `{ app: 'zikr', version: 1, exportedAt, state }` |
-| `serializeBackup(backup)` | Pretty-printed JSON string |
-| `parseBackup(json)` | JSON.parse + `validateBackup`, Arabic error messages |
-| `validateBackup(raw)` | Accepts the wrapped shape **or** a bare state; checks `today` format, `todayCounts`/`history` are objects (not arrays); runs `migrateState` on success |
+| Action | Alerts | Effect |
+|---|---|---|
+| تصفير اليوم | one (`إلغاء` = cancel, `تصفير` = destructive) | `resetToday(state)` → `todayCounts = {}`, history kept |
+| تصفير كل شيء | two chained (`متابعة` → `حذف الكل`, both destructive) | `resetEverything()` → `{ today: localDateStr(), todayCounts: {}, history: {} }` |
 
-Planned UI flow (Step 4):
-- **Export**: `makeBackup` → write `zikr-backup.json` via `expo-file-system` →
-  share sheet via `expo-sharing`.
-- **Import**: pick file via `expo-document-picker` → read text → `parseBackup`
-  → invalid → show the Arabic error; valid → **confirm dialog** ("this
-  replaces your current data") → `saveState(validated)`.
+Both handlers also call `setTapStack([])`: the undo stack records individual
+taps, so once counters are zeroed it would decrement the wrong thing.
+
+`resetToday` and `resetEverything` live in `src/logic/counter.ts` (pure, tested
+in `counter.test.ts`). Resets go through the same debounced save, so they are
+persisted within 300 ms.
+
+> Backup export/import is **not part of this version**. The pure helpers
+> (`makeBackup`, `serializeBackup`, `parseBackup`, `validateBackup`) remain in
+> `storage.ts`, unused, along with the `expo-file-system` / `expo-sharing` /
+> `expo-document-picker` dependencies — reserved for a later step.
 
 ---
 
@@ -261,6 +277,19 @@ The app is Arabic but we do **not** force app-wide RTL (`I18nManager`). Instead:
 Why manual: forcing RTL flips *everything* (including SVGs and absolute
 positions) and is hard to undo; the original HTML achieved the look with
 `direction: rtl` on specific elements, and we mirror that per-element.
+
+### 9.1b Safe areas — handled manually, with real insets
+
+`App.tsx` wraps everything in `SafeAreaProvider`, and screens/modals read
+`useSafeAreaInsets()` instead of using magic paddings:
+
+- Home `ScrollView` content padding = `insets.top + 26` / `insets.bottom + 50`,
+  so content clears the notch/Dynamic Island and the home indicator.
+- `FullScreenModal` top bar = `insets.top + 10`; modal bodies add
+  `insets.bottom + 40`.
+
+No `SafeAreaView` component: plain Views + explicit padding keeps the
+`backgroundColor: theme.ink` edge-to-edge (no white band at the top).
 
 ### 9.2 Components
 
@@ -282,14 +311,27 @@ screen, the list stays dumb).
 ### 9.3 HomeScreen composition
 
 ```
-ScrollView (maxWidth 520, centered)
-├── header: date (ar-EG) + ألا بذكر الله تطمئن القلوب
-├── grid: 2×3 row-reverse of ZikrCircle
-├── undo button (تراجع), disabled when tapStack empty
-├── divider
-├── stats: StatCard × 2 (الإجمالي الكلي، عدد الأيام)
-└── history: الأيام السابقة + HistoryList (last 10)
+SafeAreaProvider (App.tsx)
+└── ScrollView (maxWidth 520, centered; padding = insets + 26)
+    ├── header: gear button (top-left) + date (ar-EG) + ألا بذكر الله تطمئن القلوب
+    ├── إجمالي اليوم N   (small centered line: sum of the six circles)
+    ├── grid: 2×3 row-reverse of ZikrCircle
+    ├── undo button (تراجع), disabled when tapStack empty
+    ├── divider
+    ├── stats: StatCard × 2 (الإجمالي الكلي، عدد الأيام)
+    └── history button (الأيام السابقة)
+
+SettingsModal (sibling of the ScrollView, full-screen)
+├── top bar: back button + الإعدادات
+├── تصفير اليوم   → one Alert
+└── تصفير كل شيء → two chained Alerts
+
+HistoryModal (sibling of the ScrollView, full-screen)
+└── top bar: back button + الأيام السابقة → HistoryList
 ```
+
+Both modals share `FullScreenModal` (safe-area-aware top bar + back button), so
+page chrome lives in one place.
 
 ### 9.4 Theme
 
@@ -353,8 +395,9 @@ npx expo start --tunnel   # ngrok tunnel — works across networks
 | 1 | Scaffold, deps, configs, icons | ✅ committed |
 | 2 | types, constants, logic, storage + tests | ✅ committed |
 | 3 | ZikrCircle, StatCard, HistoryList, HomeScreen | ✅ committed |
-| 4 | Backup export/import UI | ⬜ next (pure functions already in storage.ts) |
-| 5 | README + final lint/typecheck/test pass | ⬜ |
+| 4 | Settings modal: reset today / reset everything + confirmations | ✅ done |
+| 5 | README + final lint/typecheck/test pass | ⬜ next |
 
 Explicitly **excluded** from the port (per spec): the refresh button, web
-manifest, and corner star decorations of the original HTML app.
+manifest, and corner star decorations of the original HTML app. Backup
+export/import is deferred — not part of this version.

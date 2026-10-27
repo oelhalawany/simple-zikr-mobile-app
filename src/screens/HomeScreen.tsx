@@ -8,12 +8,16 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HEADER_TITLE, HISTORY_LIMIT, PHRASES } from '../constants/phrases';
 import { theme } from '../constants/theme';
 import {
+  dayTotal,
   daysTracked,
   lastHistoryDays,
   lifetimeTotal,
+  resetEverything,
+  resetToday,
   rollDayIfNeeded,
   tap as tapPhrase,
   undoTap,
@@ -22,11 +26,17 @@ import { loadState, saveState } from '../storage/storage';
 import type { PhraseId, ZikrState } from '../types';
 import ZikrCircle from '../components/ZikrCircle';
 import StatCard from '../components/StatCard';
-import HistoryList, { type HistoryEntry } from '../components/HistoryList';
+import type { HistoryEntry } from '../components/HistoryList';
+import HistoryModal from '../components/HistoryModal';
+import SettingsModal from '../components/SettingsModal';
+import GearIcon from '../components/GearIcon';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<ZikrState | null>(null);
   const [tapStack, setTapStack] = useState<PhraseId[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load persisted state once, rolling the day forward if the app was closed overnight.
@@ -61,6 +71,20 @@ export default function HomeScreen() {
     });
   }, []);
 
+  // --- Settings actions -----------------------------------------------------
+  // Both are called only after the user confirms in the modal's Alerts.
+  const onResetToday = useCallback(() => {
+    setState((s) => (s ? resetToday(s) : s));
+    setTapStack([]); // undo history no longer matches the counters
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
+
+  const onResetEverything = useCallback(() => {
+    setState(() => resetEverything());
+    setTapStack([]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }, []);
+
   // While the app stays open past midnight, roll the day like the HTML's interval check.
   useEffect(() => {
     const iv = setInterval(() => {
@@ -71,11 +95,16 @@ export default function HomeScreen() {
 
   if (!state) {
     return (
-      <View style={[styles.wrap, styles.loading]}>
+      <View style={[styles.screen, styles.loading, { paddingTop: insets.top }]}>
         <Text style={styles.loadingText}>...</Text>
       </View>
     );
   }
+
+  // Derived numbers: recomputed on every render, so taps and undo update them.
+  const todayTotal = dayTotal(state.todayCounts);
+  const grandTotal = lifetimeTotal(state);
+  const trackedDays = daysTracked(state);
 
   const dateLabel = new Date().toLocaleDateString('ar-EG', {
     weekday: 'long',
@@ -92,53 +121,91 @@ export default function HomeScreen() {
   }));
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.wrap}>
-      <StatusBar style="light" />
-      <View style={styles.header}>
-        <Text style={styles.date}>{dateLabel}</Text>
-        <Text style={styles.title}>{HEADER_TITLE}</Text>
-      </View>
+    <>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.wrap,
+          { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 50 },
+        ]}
+      >
+        <StatusBar style="light" />
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => setSettingsOpen(true)}
+            style={({ pressed }) => [styles.settingsBtn, pressed && styles.settingsBtnPressed]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="الإعدادات"
+          >
+            <GearIcon color={theme.sage} />
+          </Pressable>
+          <Text style={styles.date}>{dateLabel}</Text>
+          <Text style={styles.title}>{HEADER_TITLE}</Text>
+        </View>
 
-      <View style={styles.grid}>
-        {PHRASES.map((p) => (
-          <View key={p.id} style={styles.gridCell}>
-            <ZikrCircle
-              phrase={p.label}
-              count={state.todayCounts[p.id] ?? 0}
-              onTap={() => onTap(p.id)}
-            />
-          </View>
-        ))}
-      </View>
+        <Text style={styles.todayTotal}>إجمالي اليوم {todayTotal.toLocaleString('ar-EG')}</Text>
 
-      <View style={styles.controlsRow}>
-        <Pressable
-          onPress={onUndo}
-          disabled={tapStack.length === 0}
-          style={({ pressed }) => [
-            styles.ctrlBtn,
-            tapStack.length === 0 && styles.ctrlBtnDisabled,
-            pressed && styles.ctrlBtnPressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="تراجع"
-        >
-          <Text style={styles.ctrlBtnText}>تراجع</Text>
-        </Pressable>
-      </View>
+        <View style={styles.grid}>
+          {PHRASES.map((p) => (
+            <View key={p.id} style={styles.gridCell}>
+              <ZikrCircle
+                phrase={p.label}
+                count={state.todayCounts[p.id] ?? 0}
+                onTap={() => onTap(p.id)}
+              />
+            </View>
+          ))}
+        </View>
 
-      <View style={styles.divider} />
+        <View style={styles.controlsRow}>
+          <Pressable
+            onPress={onUndo}
+            disabled={tapStack.length === 0}
+            style={({ pressed }) => [
+              styles.ctrlBtn,
+              tapStack.length === 0 && styles.ctrlBtnDisabled,
+              pressed && styles.ctrlBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="تراجع"
+          >
+            <Text style={styles.ctrlBtnText}>تراجع</Text>
+          </Pressable>
+        </View>
 
-      <View style={styles.stats}>
-        <StatCard num={lifetimeTotal(state).toLocaleString('ar-EG')} lbl="الإجمالي الكلي" />
-        <StatCard num={daysTracked(state).toLocaleString('ar-EG')} lbl="عدد الأيام" />
-      </View>
+        <View style={styles.divider} />
 
-      <View style={styles.history}>
-        <Text style={styles.historyTitle}>الأيام السابقة</Text>
-        <HistoryList entries={historyEntries} />
-      </View>
-    </ScrollView>
+        <View style={styles.stats}>
+          <StatCard num={grandTotal.toLocaleString('ar-EG')} lbl="الإجمالي الكلي" />
+          <StatCard num={trackedDays.toLocaleString('ar-EG')} lbl="عدد الأيام" />
+        </View>
+
+        <View style={styles.controlsRow}>
+          <Pressable
+            onPress={() => setHistoryOpen(true)}
+            style={({ pressed }) => [styles.ctrlBtn, pressed && styles.ctrlBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="الأيام السابقة"
+          >
+            <Text style={styles.ctrlBtnText}>الأيام السابقة</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+
+      <SettingsModal
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onResetToday={onResetToday}
+        onResetEverything={onResetEverything}
+      />
+
+      <HistoryModal
+        visible={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        entries={historyEntries}
+      />
+    </>
   );
 }
 
@@ -165,7 +232,21 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 22,
+    marginBottom: 10,
+  },
+  settingsBtn: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  settingsBtnPressed: {
+    backgroundColor: theme.buttonPressed,
   },
   date: {
     fontSize: 13,
@@ -177,6 +258,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.text,
     textAlign: 'center',
+  },
+  todayTotal: {
+    fontSize: 13,
+    color: theme.sage,
+    textAlign: 'center',
+    marginBottom: 18,
   },
   grid: {
     flexDirection: 'row-reverse',
@@ -221,15 +308,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     gap: 12,
     marginBottom: 22,
-  },
-  history: {
-    marginBottom: 20,
-  },
-  historyTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: theme.sage,
-    marginBottom: 10,
-    textAlign: 'right',
   },
 });

@@ -14,4 +14,5 @@ export const theme = {
   historyRowBorder: 'rgba(237,231,214,0.08)',
   buttonBorder: 'rgba(237,231,214,0.3)',
   buttonPressed: 'rgba(237,231,214,0.1)',
+  danger: '#E08A78', // destructive settings actions
 } as const;

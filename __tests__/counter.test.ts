@@ -5,6 +5,8 @@ import {
   lastHistoryDays,
   lifetimeTotal,
   localDateStr,
+  resetEverything,
+  resetToday,
   ringProgress,
   rollDayIfNeeded,
   tap,
@@ -139,5 +141,45 @@ describe('ring helpers', () => {
     expect(lapsDone(32)).toBe(0);
     expect(lapsDone(33)).toBe(1);
     expect(lapsDone(99)).toBe(3);
+  });
+});
+
+describe('resetToday', () => {
+  it('clears today counts and keeps history', () => {
+    const s = state({
+      todayCounts: { subhanallah: 12, allahuakbar: 4 },
+      history: { '2026-10-26': { total: 9, breakdown: { subhanallah: 9 } } },
+    });
+    const next = resetToday(s);
+    expect(next.todayCounts).toEqual({});
+    expect(next.history).toEqual(s.history);
+    expect(next.today).toBe('2026-10-27');
+  });
+
+  it('does not mutate the input', () => {
+    const s = state({ todayCounts: { subhanallah: 3 } });
+    resetToday(s);
+    expect(s.todayCounts).toEqual({ subhanallah: 3 });
+  });
+
+  it('drops the lifetime contribution of today but keeps history in the total', () => {
+    const s = state({
+      todayCounts: { subhanallah: 5 },
+      history: { '2026-10-26': { total: 7, breakdown: {} } },
+    });
+    expect(lifetimeTotal(resetToday(s))).toBe(7);
+  });
+});
+
+describe('resetEverything', () => {
+  it('wipes today, history and the lifetime total', () => {
+    const next = resetEverything('2026-10-27');
+    expect(next).toEqual({ today: '2026-10-27', todayCounts: {}, history: {} });
+    expect(lifetimeTotal(next)).toBe(0);
+    expect(daysTracked(next)).toBe(0);
+  });
+
+  it('defaults to the local date', () => {
+    expect(resetEverything().today).toBe(localDateStr());
   });
 });
