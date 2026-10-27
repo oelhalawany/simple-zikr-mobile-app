@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F3B39">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="apple-mobile-web-app-title" content="الذكر">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ألا بذكر الله تطمئن القلوب</title>
+<style>
+  :root {
+    --ink: #0F3B39;
+    --ink-2: #14504C;
+    --brass: #B5883C;
+    --brass-light: #E4C98A;
+    --sage: #7FA893;
+    --text-on-ink: #EDE7D6;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ink);
+    color: var(--text-on-ink);
+    font-family: 'Geeza Pro', 'Traditional Arabic', Tahoma, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 26px 16px 50px;
+    position: relative;
+  }
+  .corner {
+    position: fixed;
+    width: 220px;
+    height: 220px;
+    opacity: 0.07;
+    pointer-events: none;
+  }
+  .corner.tl { top: -40px; right: -40px; }
+  .corner.br { bottom: -40px; left: -40px; transform: rotate(180deg); }
+
+  header {
+    text-align: center;
+    margin-bottom: 22px;
+    position: relative;
+  }
+  .refresh-btn {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(237,231,214,0.3);
+    background: transparent;
+    color: var(--text-on-ink);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .refresh-btn:active { background: rgba(237,231,214,0.12); }
+  header .date {
+    font-size: 13px;
+    color: var(--sage);
+    margin: 0 0 6px;
+  }
+  header h1 {
+    font-size: 26px;
+    font-weight: bold;
+    margin: 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .circle-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    max-width: 220px;
+  }
+  .circle-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: rgba(237,231,214,0.12); stroke-width: 7; }
+  .ring-fg { fill: none; stroke: var(--brass-light); stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 0.2s ease; }
+  .tap-circle {
+    position: absolute;
+    top: 8%; right: 8%; left: 8%; bottom: 8%;
+    border-radius: 50%;
+    background: var(--ink-2);
+    border: none;
+    color: var(--text-on-ink);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: transform 0.08s ease, background 0.15s ease;
+    padding: 6px;
+  }
+  .tap-circle:active { transform: scale(0.94); background: #1A5F5A; }
+  .tap-circle .count {
+    font-size: clamp(24px, 8vw, 36px);
+    font-weight: bold;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .tap-circle .label {
+    font-size: clamp(11px, 3.2vw, 14px);
+    font-weight: bold;
+    color: var(--brass-light);
+    text-align: center;
+    line-height: 1.25;
+  }
+  .lap-note {
+    font-size: 11px;
+    color: var(--sage);
+    margin-top: 6px;
+    min-height: 14px;
+  }
+
+  .controls-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .ctrl-btn {
+    font-size: 15px;
+    font-weight: bold;
+    padding: 14px 24px;
+    border-radius: 12px;
+    border: 2px solid rgba(237,231,214,0.3);
+    background: transparent;
+    color: var(--text-on-ink);
+    cursor: pointer;
+  }
+  .ctrl-btn:active { background: rgba(237,231,214,0.1); }
+
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(237,231,214,0.15);
+    margin: 0 0 20px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .stat-card {
+    background: var(--ink-2);
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-card .num { font-size: 24px; font-weight: bold; color: var(--brass-light); }
+  .stat-card .lbl { font-size: 13px; color: var(--sage); margin-top: 4px; }
+
+  .history h2 {
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--sage);
+    margin: 0 0 10px;
+  }
+  .history-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(237,231,214,0.08);
+  }
+  .history-row .d { color: rgba(237,231,214,0.6); }
+  .empty-note {
+    font-size: 14px;
+    color: rgba(237,231,214,0.4);
+    text-align: center;
+    padding: 8px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <button class="refresh-btn" id="refresh-btn" title="تحديث">↻</button>
+    <p class="date" id="today-date"></p>
+    <h1>ألا بذكر الله تطمئن القلوب</h1>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="controls-row">
+    <button class="ctrl-btn" id="undo-btn">تراجع</button>
+  </div>
+
+  <hr class="divider">
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="num" id="lifetime-total">0</div>
+      <div class="lbl">الإجمالي الكلي</div>
+    </div>
+    <div class="stat-card">
+      <div class="num" id="days-tracked">0</div>
+      <div class="lbl">عدد الأيام</div>
+    </div>
+  </div>
+
+  <div class="history">
+    <h2>الأيام السابقة</h2>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+const PHRASES = [
+  { id: 'subhanallah', label: 'سبحان الله' },
+  { id: 'alhamdulillah', label: 'الحمد لله' },
+  { id: 'lailaha', label: 'لا إله إلا الله' },
+  { id: 'allahuakbar', label: 'الله أكبر' },
+  { id: 'astaghfirullah', label: 'أستغفر الله' },
+  { id: 'lahawla', label: 'لا حول ولا قوة إلا بالله' }
+];
+
+const LAP = 33;
+const STORAGE_KEY = 'zikr-data-ar-v2';
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+let state = {
+  today: todayStr(),
+  todayCounts: {},
+  history: {}
+};
+
+let tapStack = [];
+
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error('save failed', e);
+    }
+  }, 300);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const loaded = JSON.parse(raw);
+      state = Object.assign(state, loaded);
+    }
+  } catch (e) {
+    // no existing data yet
+  }
+  rollDayIfNeeded();
+  buildGrid();
+  render();
+}
+
+function rollDayIfNeeded() {
+  const now = todayStr();
+  if (state.today !== now) {
+    if (state.today && Object.keys(state.todayCounts).length) {
+      const total = Object.values(state.todayCounts).reduce((a, b) => a + b, 0);
+      if (total > 0) {
+        state.history[state.today] = { total, breakdown: state.todayCounts };
+      }
+    }
+    state.today = now;
+    state.todayCounts = {};
+  }
+}
+
+function lifetimeTotal() {
+  let total = Object.values(state.todayCounts).reduce((a, b) => a + b, 0);
+  Object.values(state.history).forEach(day => { total += day.total; });
+  return total;
+}
+
+function buildGrid() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  const circumference = 2 * Math.PI * 47;
+  PHRASES.forEach(p => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.innerHTML =
+      '<div class="circle-wrap">' +
+        '<svg viewBox="0 0 100 100">' +
+          '<circle class="ring-bg" cx="50" cy="50" r="47"></circle>' +
+          '<circle class="ring-fg" id="ring-' + p.id + '" cx="50" cy="50" r="47" stroke-dasharray="' + circumference + '"></circle>' +
+        '</svg>' +
+        '<button class="tap-circle" id="btn-' + p.id + '" data-id="' + p.id + '">' +
+          '<span class="count" id="count-' + p.id + '">0</span>' +
+          '<span class="label">' + p.label + '</span>' +
+        '</button>' +
+      '</div>' +
+      '<span class="lap-note" id="lap-' + p.id + '"></span>';
+    grid.appendChild(cell);
+    document.getElementById('btn-' + p.id).addEventListener('click', () => tap(p.id));
+  });
+}
+
+function render() {
+  document.getElementById('today-date').textContent = new Date().toLocaleDateString('ar-EG', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const circumference = 2 * Math.PI * 47;
+  PHRASES.forEach(p => {
+    const count = state.todayCounts[p.id] || 0;
+    document.getElementById('count-' + p.id).textContent = count.toLocaleString('ar-EG');
+    const progress = (count % LAP) / LAP;
+    const ring = document.getElementById('ring-' + p.id);
+    const offset = count === 0 ? circumference : circumference * (1 - progress);
+    ring.style.strokeDashoffset = offset;
+    const laps = Math.floor(count / LAP);
+    document.getElementById('lap-' + p.id).textContent = laps > 0 ? ('× ' + laps.toLocaleString('ar-EG') + ' دورة') : '';
+  });
+
+  document.getElementById('lifetime-total').textContent = lifetimeTotal().toLocaleString('ar-EG');
+  document.getElementById('days-tracked').textContent = Object.keys(state.history).length.toLocaleString('ar-EG');
+
+  const histList = document.getElementById('history-list');
+  histList.innerHTML = '';
+  const days = Object.keys(state.history).sort().reverse().slice(0, 10);
+  if (days.length === 0) {
+    histList.innerHTML = '<div class="empty-note">ستظهر هنا أيامك المكتملة</div>';
+  } else {
+    days.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      const dateLabel = new Date(d + 'T00:00:00').toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+      row.innerHTML = '<span class="d">' + dateLabel + '</span><span>' + state.history[d].total.toLocaleString('ar-EG') + '</span>';
+      histList.appendChild(row);
+    });
+  }
+}
+
+function tap(id) {
+  rollDayIfNeeded();
+  state.todayCounts[id] = (state.todayCounts[id] || 0) + 1;
+  tapStack.push(id);
+  render();
+  scheduleSave();
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+
+function undoLast() {
+  const id = tapStack.pop();
+  if (id && state.todayCounts[id] > 0) {
+    state.todayCounts[id] -= 1;
+    render();
+    scheduleSave();
+    if (navigator.vibrate) navigator.vibrate(15);
+  }
+}
+
+document.getElementById('undo-btn').addEventListener('click', undoLast);
+
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  window.location.href = window.location.pathname + '?t=' + Date.now();
+});
+
+loadState();
+</script>
+
+</body>
+</html>
