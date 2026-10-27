@@ -3,6 +3,9 @@
 A complete map of how this app is built, why each piece exists, and how data flows.
 Read this top-to-bottom once and you'll understand every file in the repo.
 
+> For day-to-day commands (run on phone, tests, EAS builds), see
+> [DEVELOPMENT.md](./DEVELOPMENT.md).
+
 ---
 
 ## 1. What this app is
