@@ -83,7 +83,9 @@ describe('backup validation', () => {
   it('rejects non-JSON', () => {
     const v = parseBackup('not json at all');
     expect(v.ok).toBe(false);
-    expect(v.error).toContain('JSON');
+    if (!v.ok) {
+      expect(v.error).toContain('JSON');
+    }
   });
 
   it('rejects wrong shapes', () => {
